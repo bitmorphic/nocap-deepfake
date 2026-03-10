@@ -371,7 +371,7 @@ html, body, [class*="css"], .stApp {
 DEVICE      = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 BASE_DRIVE  = '/content/drive/MyDrive/NoCap-Deepfake'
 MODEL_ID    = "13goF5n1TXIOtaimlNZPQ2s4mAr3uTJCp"
-THRESHOLD   = 0.65
+THRESHOLD   = 0.94
 
 # ── Model ───────────────────────────────────────────────────
 class EfficientNetB4(nn.Module):
