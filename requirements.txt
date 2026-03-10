@@ -1,0 +1,10 @@
+streamlit
+torch
+torchvision
+facenet-pytorch
+opencv-python-headless
+numpy==1.26.4
+Pillow==10.2.0
+matplotlib
+gdown
+scikit-learn
