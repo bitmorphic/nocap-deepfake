@@ -335,7 +335,7 @@ st.markdown("""
 <div class="divider"></div>
 """, unsafe_allow_html=True)
 
-tab1, tab2, tab3 = st.tabs(["ANALYSE VIDEO", "WEBCAM", "ABOUT"])
+tab1, tab2 = st.tabs(["ANALYSE VIDEO", "ABOUT"])
 
 # ══════════════════════════════════════════════════════════════
 # TAB 1 — VIDEO UPLOAD
@@ -410,72 +410,9 @@ with tab1:
         except: pass
 
 # ══════════════════════════════════════════════════════════════
-# TAB 2 — WEBCAM
+# TAB 2 — ABOUT
 # ══════════════════════════════════════════════════════════════
 with tab2:
-    st.markdown("""
-    <div style="font-family:'DM Mono',monospace;font-size:0.68rem;color:#555;
-                letter-spacing:3px;text-transform:uppercase;margin-bottom:20px;">
-        Point your camera at a face and click capture
-    </div>""", unsafe_allow_html=True)
-
-    cam_col, res_col = st.columns([1,1], gap="large")
-
-    with cam_col:
-        webcam_img = st.camera_input("", label_visibility="collapsed")
-
-    with res_col:
-        if webcam_img is None:
-            st.markdown("""
-            <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);
-                        border-radius:16px;padding:60px 24px;text-align:center;margin-top:8px;">
-                <div style="font-family:'DM Mono',monospace;font-size:0.65rem;color:#333;
-                            letter-spacing:3px;text-transform:uppercase;">Waiting for capture...</div>
-            </div>""", unsafe_allow_html=True)
-        else:
-            with st.spinner("Analysing..."):
-                model, transform = load_model()
-                mtcnn = load_mtcnn()
-                pil_img  = Image.open(webcam_img).convert("RGB")
-                face     = crop_face(pil_img, mtcnn)
-                score    = score_face(face, model, transform)
-                norm     = normalise_score(score)
-                is_fake  = norm > NORM_THRESHOLD
-                verdict  = "FAKE" if is_fake else "REAL"
-                conf     = norm*100 if is_fake else (1-norm)*100
-                conf     = min(round(conf,1), 99.9)
-
-            v_class  = "verdict-fake" if verdict=="FAKE" else "verdict-real"
-            icon_svg = ("""<svg width="24" height="24" viewBox="0 0 28 28" fill="none">
-                <path d="M14 4L17 10L24 11L19 16L20 23L14 20L8 23L9 16L4 11L11 10L14 4Z" fill="#ff2d55" opacity="0.9"/>
-                </svg>""" if verdict=="FAKE" else
-                """<svg width="24" height="24" viewBox="0 0 28 28" fill="none">
-                <path d="M6 14L12 20L22 8" stroke="#00d278" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>""")
-
-            st.markdown(f"""
-            <div class="{v_class}" style="margin-top:8px;">
-                <div class="verdict-label">Webcam Result</div>
-                <div style="display:flex;align-items:center;justify-content:center;gap:10px">
-                    {icon_svg}<div class="verdict-text" style="font-size:3rem;">{verdict}</div>
-                </div>
-                <div class="verdict-conf">{conf}% confidence &nbsp;·&nbsp; raw {round(score,4)} &nbsp;·&nbsp; norm {round(norm,3)}</div>
-            </div>""", unsafe_allow_html=True)
-
-            st.markdown('<div class="divider" style="margin:16px 0"></div>', unsafe_allow_html=True)
-            st.markdown('<div class="section-title" style="font-size:1rem;margin-bottom:12px;">ACTIVATION MAP</div>', unsafe_allow_html=True)
-            gc_imgs = run_gradcam(model, transform, face)
-            if gc_imgs:
-                w1,w2,w3 = st.columns(3, gap="small")
-                img_np = np.array(face.resize((224,224)))
-                with w1: st.image(img_np, use_column_width=True); st.markdown('<div class="gradcam-caption">Captured Face</div>', unsafe_allow_html=True)
-                with w2: st.image(gc_imgs[0], use_column_width=True); st.markdown('<div class="gradcam-caption">Heatmap</div>', unsafe_allow_html=True)
-                with w3: st.image(gc_imgs[1], use_column_width=True); st.markdown('<div class="gradcam-caption">Overlay</div>', unsafe_allow_html=True)
-
-# ══════════════════════════════════════════════════════════════
-# TAB 3 — ABOUT
-# ══════════════════════════════════════════════════════════════
-with tab3:
     col1, col2 = st.columns(2, gap="large")
     with col1:
         st.markdown(f"""
