@@ -3,8 +3,8 @@ torch
 torchvision
 facenet-pytorch
 opencv-python-headless
-numpy==1.26.4
-Pillow==10.2.0
+numpy
+Pillow
 matplotlib
 gdown
 scikit-learn
