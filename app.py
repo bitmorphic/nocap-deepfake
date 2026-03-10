@@ -133,14 +133,19 @@ DEVICE     = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 BASE_DRIVE = '/content/drive/MyDrive/NoCap-Deepfake'
 MODEL_ID   = "13goF5n1TXIOtaimlNZPQ2s4mAr3uTJCp"
 
-# ── Smart dual-condition threshold ───────────────────────────
-# A video is FAKE only when BOTH are true:
-# 1. avg score across all faces  > AVG_THRESHOLD
-# 2. % of frames above FRAME_THRESHOLD > FAKE_FRAME_RATIO
-# This prevents a few spike frames from causing false FAKEs
-AVG_THRESHOLD    = 0.90
-FRAME_THRESHOLD  = 0.80
-FAKE_FRAME_RATIO = 0.55
+# ── Calibrated score normalisation ──────────────────────────
+# Raw model scores are compressed in 0.85-1.0 because DFDC is 79% fake.
+# We normalise using empirical anchors so real→~0, fake→~1.
+#   REAL_ANCHOR: typical avg score for a known real video
+#   FAKE_ANCHOR: typical avg score for a known fake video
+# Normalised score = (raw - REAL_ANCHOR) / (FAKE_ANCHOR - REAL_ANCHOR)
+# Decision at NORM_THRESHOLD=0.50 on normalised score.
+# Guard: 60%+ of frames must also be above FRAME_THRESHOLD (raw).
+REAL_ANCHOR      = 0.88
+FAKE_ANCHOR      = 0.97
+NORM_THRESHOLD   = 0.50
+FRAME_THRESHOLD  = 0.92
+FAKE_FRAME_RATIO = 0.60
 
 # ── Model definition ─────────────────────────────────────────
 class EfficientNetB4(nn.Module):
@@ -225,13 +230,24 @@ def score_face(face_img, model, transform):
     with torch.no_grad():
         return torch.sigmoid(model(inp)).item()
 
+def normalise_score(raw):
+    """Rescale raw model score to 0-1 using empirical anchors.
+    Scores at or below REAL_ANCHOR → 0 (definitely real)
+    Scores at or above FAKE_ANCHOR → 1 (definitely fake)
+    """
+    norm = (raw - REAL_ANCHOR) / (FAKE_ANCHOR - REAL_ANCHOR)
+    return float(np.clip(norm, 0.0, 1.0))
+
 def smart_verdict(scores):
     avg        = float(np.mean(scores))
+    norm_avg   = normalise_score(avg)
     fake_ratio = float(np.mean([s > FRAME_THRESHOLD for s in scores]))
-    is_fake    = avg > AVG_THRESHOLD and fake_ratio > FAKE_FRAME_RATIO
+    # FAKE only when normalised score passes threshold AND frame ratio confirms
+    is_fake    = norm_avg > NORM_THRESHOLD and fake_ratio > FAKE_FRAME_RATIO
     verdict    = "FAKE" if is_fake else "REAL"
-    conf       = avg*100 if is_fake else (1-avg)*100
-    return verdict, min(round(conf,1), 99.9), round(avg,4), round(fake_ratio,3)
+    # Confidence shown as normalised score * 100
+    conf       = norm_avg * 100 if is_fake else (1 - norm_avg) * 100
+    return verdict, min(round(conf, 1), 99.9), round(avg, 4), round(fake_ratio, 3), round(norm_avg, 3)
 
 def extract_frames(video_path, max_frames=20):
     cap   = cv2.VideoCapture(video_path)
@@ -256,7 +272,7 @@ def run_gradcam(model, transform, face):
         return apply_heatmap(cam, img_np)
     except: return None
 
-def render_verdict_card(verdict, confidence, avg_score, fake_ratio, faces_count):
+def render_verdict_card(verdict, confidence, avg_score, fake_ratio, norm_score, faces_count):
     v_class  = "verdict-fake" if verdict=="FAKE" else "verdict-real"
     icon_svg = ("""<svg width="28" height="28" viewBox="0 0 28 28" fill="none">
         <path d="M14 4L17 10L24 11L19 16L20 23L14 20L8 23L9 16L4 11L11 10L14 4Z" fill="#ff2d55" opacity="0.9"/>
@@ -274,9 +290,9 @@ def render_verdict_card(verdict, confidence, avg_score, fake_ratio, faces_count)
     </div>
     <div class="score-grid">
         <div class="score-card">
-            <div class="score-card-label">Avg Score</div>
-            <div class="score-card-value">{avg_score:.2f}</div>
-            <div class="score-card-sub">threshold {AVG_THRESHOLD}</div>
+            <div class="score-card-label">Fake Prob</div>
+            <div class="score-card-value">{norm_score:.2f}</div>
+            <div class="score-card-sub">normalised score</div>
         </div>
         <div class="score-card">
             <div class="score-card-label">Fake Frames</div>
@@ -361,8 +377,8 @@ with tab1:
                     prog.progress((i+1)/len(frames), text=f"Frame {i+1}/{len(frames)}")
                 prog.empty()
 
-                verdict, confidence, avg_score, fake_ratio = smart_verdict(scores)
-                render_verdict_card(verdict, confidence, avg_score, fake_ratio, len(faces))
+                verdict, confidence, avg_score, fake_ratio, norm_score = smart_verdict(scores)
+                render_verdict_card(verdict, confidence, avg_score, fake_ratio, norm_score, len(faces))
 
         # Frame chart
         if 'scores' in dir() and scores:
@@ -370,12 +386,12 @@ with tab1:
             st.markdown('<div class="section-title">FRAME-BY-FRAME SCORES</div>', unsafe_allow_html=True)
             chart_df = pd.DataFrame({
                 "Fake Score": [round(s,4) for s in scores],
-                "Threshold":  [AVG_THRESHOLD]*len(scores),
+                "Threshold":  [FAKE_ANCHOR]*len(scores),
             }, index=[f"F{i+1}" for i in range(len(scores))])
             st.line_chart(chart_df, color=["#ff2d55","#333344"])
             st.markdown(f"""
             <div style="font-family:'DM Mono',monospace;font-size:0.6rem;color:#444;letter-spacing:2px;text-transform:uppercase;margin-top:4px;">
-                Red = per-frame fake score &nbsp;·&nbsp; Gray = threshold ({AVG_THRESHOLD}) &nbsp;·&nbsp; Spikes = suspicious moments
+                Red = per-frame fake score &nbsp;·&nbsp; Gray = fake anchor ({FAKE_ANCHOR}) &nbsp;·&nbsp; Spikes = suspicious moments
             </div>""", unsafe_allow_html=True)
 
         # Grad-CAM
@@ -423,9 +439,10 @@ with tab2:
                 pil_img  = Image.open(webcam_img).convert("RGB")
                 face     = crop_face(pil_img, mtcnn)
                 score    = score_face(face, model, transform)
-                is_fake  = score > AVG_THRESHOLD
+                norm     = normalise_score(score)
+                is_fake  = norm > NORM_THRESHOLD
                 verdict  = "FAKE" if is_fake else "REAL"
-                conf     = score*100 if is_fake else (1-score)*100
+                conf     = norm*100 if is_fake else (1-norm)*100
                 conf     = min(round(conf,1), 99.9)
 
             v_class  = "verdict-fake" if verdict=="FAKE" else "verdict-real"
@@ -442,7 +459,7 @@ with tab2:
                 <div style="display:flex;align-items:center;justify-content:center;gap:10px">
                     {icon_svg}<div class="verdict-text" style="font-size:3rem;">{verdict}</div>
                 </div>
-                <div class="verdict-conf">{conf}% confidence &nbsp;·&nbsp; raw score {round(score,4)}</div>
+                <div class="verdict-conf">{conf}% confidence &nbsp;·&nbsp; raw {round(score,4)} &nbsp;·&nbsp; norm {round(norm,3)}</div>
             </div>""", unsafe_allow_html=True)
 
             st.markdown('<div class="divider" style="margin:16px 0"></div>', unsafe_allow_html=True)
@@ -467,7 +484,7 @@ with tab3:
             <div class="pipeline-row"><span class="pipeline-num">01</span>OpenCV — extract 20 evenly spaced frames</div>
             <div class="pipeline-row"><span class="pipeline-num">02</span>MTCNN — detect & crop faces to 224×224</div>
             <div class="pipeline-row"><span class="pipeline-num">03</span>EfficientNet-B4 — score each face (0–1)</div>
-            <div class="pipeline-row"><span class="pipeline-num">04</span>Dual threshold — avg &gt; {AVG_THRESHOLD} AND {int(FAKE_FRAME_RATIO*100)}% frames &gt; {FRAME_THRESHOLD}</div>
+            <div class="pipeline-row"><span class="pipeline-num">04</span>Score normalisation + {int(FAKE_FRAME_RATIO*100)}% frames above {FRAME_THRESHOLD} guard</div>
             <div class="pipeline-row"><span class="pipeline-num">05</span>Grad-CAM — highlight suspicious regions</div>
         </div>
         <div class="about-card">
@@ -477,22 +494,21 @@ with tab3:
             <div class="metric-row"><span class="metric-label">Val Accuracy</span><span class="metric-value">87.44%</span></div>
             <div class="metric-row"><span class="metric-label">Fake Detection</span><span class="metric-value">91%</span></div>
             <div class="metric-row"><span class="metric-label">Real Detection</span><span class="metric-value">78%</span></div>
-            <div class="metric-row"><span class="metric-label">Avg Threshold</span><span class="metric-value">{AVG_THRESHOLD}</span></div>
-            <div class="metric-row"><span class="metric-label">Frame Threshold</span><span class="metric-value">{FRAME_THRESHOLD}</span></div>
+            <div class="metric-row"><span class="metric-label">Norm Threshold</span><span class="metric-value">{NORM_THRESHOLD}</span></div>
+            <div class="metric-row"><span class="metric-label">Frame Guard</span><span class="metric-value">{FAKE_FRAME_RATIO}</span></div>
         </div>
         """, unsafe_allow_html=True)
     with col2:
         st.markdown("""
         <div class="about-card">
-            <div class="about-card-title">Smart Dual-Condition Detection</div>
+            <div class="about-card-title">Score Normalisation</div>
             <p>
-                NoCap uses a dual-condition threshold for robust detection.
-                A video is flagged FAKE only when <strong style="color:#e0e0e0">both</strong>
-                conditions are true: the average face score exceeds 0.90,
-                AND at least 55% of individual frames score above 0.80.<br><br>
-                This prevents false positives caused by isolated high-scoring frames
-                in real videos. The frame-by-frame chart shows exactly where suspicious
-                moments occur in the video timeline.
+                NoCap uses score normalisation to handle model bias. Raw scores are compressed
+                near 1.0 due to class imbalance (79% fake training data). We rescale using
+                empirical anchors: real videos anchor at 0.88, fake at 0.97. After
+                normalisation, a real video scores near 0 and a fake scores near 1.<br><br>
+                A secondary frame guard requires 60%+ of frames to confirm the verdict,
+                preventing isolated spike frames from causing false positives.
             </p>
         </div>
         <div class="about-card">
