@@ -371,7 +371,7 @@ html, body, [class*="css"], .stApp {
 DEVICE      = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 BASE_DRIVE  = '/content/drive/MyDrive/NoCap-Deepfake'
 MODEL_ID    = "13goF5n1TXIOtaimlNZPQ2s4mAr3uTJCp"
-THRESHOLD   = 0.45
+THRESHOLD   = 0.65
 
 # ── Model ───────────────────────────────────────────────────
 class EfficientNetB4(nn.Module):
@@ -498,6 +498,8 @@ def analyse_video(video_path, model, transform):
     progress.empty()
 
     avg_score  = float(np.mean(scores))
+    # DEBUG — remove after threshold is confirmed
+    st.info(f"Debug scores → Min: {min(scores):.3f} | Max: {max(scores):.3f} | Avg: {avg_score:.3f}")
     verdict    = "FAKE" if avg_score > THRESHOLD else "REAL"
     confidence = avg_score*100 if verdict=="FAKE" else (1-avg_score)*100
     confidence = min(round(confidence, 1), 99.9)
