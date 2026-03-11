@@ -28,17 +28,13 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html, body, [class*="css"], .stApp {
-    background-color: #080810; color: #e8e8f0;
-    font-family: 'DM Sans', sans-serif;
-}
-.stApp::before {
-    content: ''; position: fixed; inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
-    pointer-events: none; z-index: 0; opacity: 0.4;
-}
+html, body { background-color: #080810 !important; }
+.stApp { background-color: #080810 !important; color: #e8e8f0 !important; font-family: 'DM Sans', sans-serif !important; }
+p, span, div, label { color: #e8e8f0; font-family: 'DM Sans', sans-serif; }
+.stMarkdown { color: #e8e8f0; }
+/* noise overlay removed for compatibility */
 #MainMenu, footer, header { visibility: hidden; }
-.block-container { padding: 0 2rem 4rem 2rem; max-width: 1200px; }
+.block-container { padding: 0 2rem 4rem 2rem; max-width: 1200px; position: relative; z-index: 1; }
 
 /* Hero */
 .hero-wrap { position: relative; padding: 56px 0 40px 0; text-align: center; overflow: hidden; }
@@ -134,10 +130,11 @@ html, body, [class*="css"], .stApp {
 .tag { display:inline-block; background:rgba(255,45,85,0.08); border:1px solid rgba(255,45,85,0.15); border-radius:6px; padding:3px 10px; font-family:'DM Mono',monospace; font-size:0.62rem; color:#ff6b35; margin:3px; letter-spacing:1px; }
 
 /* Tabs */
-.stTabs [data-baseweb="tab-list"] { background:transparent; border-bottom:1px solid rgba(255,255,255,0.06); gap:0; }
-.stTabs [data-baseweb="tab"] { background:transparent!important; color:#444!important; font-family:'DM Mono',monospace!important; font-size:0.70rem!important; letter-spacing:2px!important; text-transform:uppercase!important; padding:12px 22px!important; border:none!important; }
-.stTabs [aria-selected="true"] { color:#ff2d55!important; border-bottom:2px solid #ff2d55!important; }
-.stTabs [data-baseweb="tab-panel"] { padding-top:28px; }
+.stTabs [data-baseweb="tab-list"] { background:transparent !important; border-bottom:1px solid rgba(255,255,255,0.06) !important; gap:0 !important; }
+.stTabs [data-baseweb="tab"] { background:transparent!important; color:#888!important; font-family:'DM Mono',monospace!important; font-size:0.70rem!important; letter-spacing:2px!important; text-transform:uppercase!important; padding:12px 22px!important; border:none!important; border-radius:0!important; }
+.stTabs [aria-selected="true"] { color:#ff2d55!important; border-bottom:2px solid #ff2d55!important; background:transparent!important; }
+.stTabs [data-baseweb="tab-panel"] { padding-top:28px; background:transparent!important; }
+button[data-baseweb="tab"] { background:transparent!important; }
 .stProgress > div > div { background:#ff2d55!important; }
 [data-testid="stFileUploaderDropzone"] { background:rgba(255,255,255,0.02)!important; border:1.5px dashed rgba(255,45,85,0.25)!important; border-radius:16px!important; }
 .stDownloadButton > button {
@@ -554,17 +551,13 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html, body, [class*="css"], .stApp {
-    background-color: #080810; color: #e8e8f0;
-    font-family: 'DM Sans', sans-serif;
-}
-.stApp::before {
-    content: ''; position: fixed; inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
-    pointer-events: none; z-index: 0; opacity: 0.4;
-}
+html, body { background-color: #080810 !important; }
+.stApp { background-color: #080810 !important; color: #e8e8f0 !important; font-family: 'DM Sans', sans-serif !important; }
+p, span, div, label { color: #e8e8f0; font-family: 'DM Sans', sans-serif; }
+.stMarkdown { color: #e8e8f0; }
+/* noise overlay removed for compatibility */
 #MainMenu, footer, header { visibility: hidden; }
-.block-container { padding: 0 2rem 4rem 2rem; max-width: 1200px; }
+.block-container { padding: 0 2rem 4rem 2rem; max-width: 1200px; position: relative; z-index: 1; }
 
 /* Hero */
 .hero-wrap { position: relative; padding: 56px 0 40px 0; text-align: center; overflow: hidden; }
@@ -660,10 +653,11 @@ html, body, [class*="css"], .stApp {
 .tag { display:inline-block; background:rgba(255,45,85,0.08); border:1px solid rgba(255,45,85,0.15); border-radius:6px; padding:3px 10px; font-family:'DM Mono',monospace; font-size:0.62rem; color:#ff6b35; margin:3px; letter-spacing:1px; }
 
 /* Tabs */
-.stTabs [data-baseweb="tab-list"] { background:transparent; border-bottom:1px solid rgba(255,255,255,0.06); gap:0; }
-.stTabs [data-baseweb="tab"] { background:transparent!important; color:#444!important; font-family:'DM Mono',monospace!important; font-size:0.70rem!important; letter-spacing:2px!important; text-transform:uppercase!important; padding:12px 22px!important; border:none!important; }
-.stTabs [aria-selected="true"] { color:#ff2d55!important; border-bottom:2px solid #ff2d55!important; }
-.stTabs [data-baseweb="tab-panel"] { padding-top:28px; }
+.stTabs [data-baseweb="tab-list"] { background:transparent !important; border-bottom:1px solid rgba(255,255,255,0.06) !important; gap:0 !important; }
+.stTabs [data-baseweb="tab"] { background:transparent!important; color:#888!important; font-family:'DM Mono',monospace!important; font-size:0.70rem!important; letter-spacing:2px!important; text-transform:uppercase!important; padding:12px 22px!important; border:none!important; border-radius:0!important; }
+.stTabs [aria-selected="true"] { color:#ff2d55!important; border-bottom:2px solid #ff2d55!important; background:transparent!important; }
+.stTabs [data-baseweb="tab-panel"] { padding-top:28px; background:transparent!important; }
+button[data-baseweb="tab"] { background:transparent!important; }
 .stProgress > div > div { background:#ff2d55!important; }
 [data-testid="stFileUploaderDropzone"] { background:rgba(255,255,255,0.02)!important; border:1.5px dashed rgba(255,45,85,0.25)!important; border-radius:16px!important; }
 .stDownloadButton > button {
