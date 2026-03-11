@@ -8,4 +8,4 @@ Pillow
 matplotlib
 gdown
 scikit-learn
-
+reportlab
