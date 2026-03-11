@@ -8,8 +8,10 @@ import cv2
 import numpy as np
 from PIL import Image
 import matplotlib.cm as cm
-import os, gdown, tempfile
+import os, gdown, tempfile, io
 import pandas as pd
+import matplotlib.pyplot as plt
+from datetime import datetime
 
 # ── Page config ──────────────────────────────────────────────
 st.set_page_config(
@@ -99,6 +101,25 @@ html, body, [class*="css"], .stApp {
 .score-card-value { font-family: 'Bebas Neue', sans-serif; font-size: 2rem; letter-spacing: 2px; color: #ff6b35; }
 .score-card-sub { font-family: 'DM Mono', monospace; font-size: 0.58rem; color: #333; margin-top: 4px; letter-spacing: 1px; }
 
+/* Risk meter */
+.risk-wrap { margin-top: 16px; }
+.risk-label-row { font-family:'DM Mono',monospace; font-size:0.62rem; letter-spacing:3px; text-transform:uppercase; color:#444; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; }
+.risk-label-name { font-weight:600; }
+.risk-bar-bg { background:rgba(255,255,255,0.05); border-radius:99px; height:10px; width:100%; overflow:hidden; }
+.risk-bar-fill { height:100%; border-radius:99px; background:linear-gradient(90deg,#00d278,#f5a623,#ff2d55); }
+.risk-ticks { display:flex; justify-content:space-between; margin-top:5px; }
+.risk-tick { font-family:'DM Mono',monospace; font-size:0.52rem; color:#333; letter-spacing:1px; }
+
+/* Download button */
+.stDownloadButton > button {
+    background: linear-gradient(135deg, #ff2d55, #ff6b35) !important;
+    color: white !important; border: none !important; border-radius: 10px !important;
+    font-family: 'DM Mono', monospace !important; font-size: 0.72rem !important;
+    letter-spacing: 2px !important; text-transform: uppercase !important;
+    padding: 10px 24px !important; width: 100% !important;
+    box-shadow: 0 0 20px rgba(255,45,85,0.3) !important;
+}
+
 /* Section title */
 .section-title { font-family: 'Bebas Neue', sans-serif; font-size: 1.4rem; letter-spacing: 4px; color: #555; margin: 24px 0 14px 0; }
 
@@ -146,6 +167,21 @@ FAKE_ANCHOR      = 0.97
 NORM_THRESHOLD   = 0.50
 FRAME_THRESHOLD  = 0.92
 FAKE_FRAME_RATIO = 0.60
+
+# Risk level scale on normalised 0-1 score
+RISK_LEVELS = [
+    (0.00, 0.20, "AUTHENTIC",       "#00d278"),
+    (0.20, 0.40, "LOW RISK",        "#4ecb71"),
+    (0.40, 0.60, "SUSPICIOUS",      "#f5a623"),
+    (0.60, 0.80, "HIGH RISK",       "#ff6b35"),
+    (0.80, 1.00, "LIKELY DEEPFAKE", "#ff2d55"),
+]
+
+def get_risk(norm):
+    for lo, hi, label, color in RISK_LEVELS:
+        if norm <= hi:
+            return label, color
+    return RISK_LEVELS[-1][2], RISK_LEVELS[-1][3]
 
 # ── Model definition ─────────────────────────────────────────
 class EfficientNetB4(nn.Module):
@@ -273,6 +309,7 @@ def run_gradcam(model, transform, face):
     except: return None
 
 def render_verdict_card(verdict, confidence, avg_score, fake_ratio, norm_score, faces_count):
+    risk_label, risk_color = get_risk(norm_score)
     v_class  = "verdict-fake" if verdict=="FAKE" else "verdict-real"
     icon_svg = ("""<svg width="28" height="28" viewBox="0 0 28 28" fill="none">
         <path d="M14 4L17 10L24 11L19 16L20 23L14 20L8 23L9 16L4 11L11 10L14 4Z" fill="#ff2d55" opacity="0.9"/>
@@ -280,6 +317,7 @@ def render_verdict_card(verdict, confidence, avg_score, fake_ratio, norm_score, 
         """<svg width="28" height="28" viewBox="0 0 28 28" fill="none">
         <path d="M6 14L12 20L22 8" stroke="#00d278" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>""")
+    bar_pct = round(norm_score * 100, 1)
     st.markdown(f"""
     <div class="{v_class}">
         <div class="verdict-label">Detection Result</div>
@@ -288,11 +326,25 @@ def render_verdict_card(verdict, confidence, avg_score, fake_ratio, norm_score, 
         </div>
         <div class="verdict-conf">{confidence}% confidence &nbsp;·&nbsp; score {avg_score}</div>
     </div>
+    <div class="risk-wrap">
+        <div class="risk-label-row">
+            <span>Risk Level</span>
+            <span class="risk-label-name" style="color:{risk_color}">{risk_label}</span>
+        </div>
+        <div class="risk-bar-bg">
+            <div class="risk-bar-fill" style="width:{bar_pct}%"></div>
+        </div>
+        <div class="risk-ticks">
+            <span class="risk-tick" style="color:#00d278">AUTHENTIC</span>
+            <span class="risk-tick" style="color:#f5a623">SUSPICIOUS</span>
+            <span class="risk-tick" style="color:#ff2d55">DEEPFAKE</span>
+        </div>
+    </div>
     <div class="score-grid">
         <div class="score-card">
             <div class="score-card-label">Fake Prob</div>
             <div class="score-card-value">{norm_score:.2f}</div>
-            <div class="score-card-sub">normalised score</div>
+            <div class="score-card-sub">normalised</div>
         </div>
         <div class="score-card">
             <div class="score-card-label">Fake Frames</div>
@@ -306,6 +358,139 @@ def render_verdict_card(verdict, confidence, avg_score, fake_ratio, norm_score, 
         </div>
     </div>
     """, unsafe_allow_html=True)
+    return risk_label, risk_color
+
+# ── PDF Report Generator ─────────────────────────────────────
+def generate_pdf(filename, verdict, risk_label, risk_color,
+                 norm_score, avg_raw, fake_ratio, scores, gradcam_overlay_np):
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.lib import colors
+    from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer,
+                                    Table, TableStyle, Image as RLImage, HRFlowable)
+    from reportlab.lib.enums import TA_CENTER
+
+    buf  = io.BytesIO()
+    W, H = letter
+    MW   = W - 1.5*inch
+    doc  = SimpleDocTemplate(buf, pagesize=letter,
+                              leftMargin=0.75*inch, rightMargin=0.75*inch,
+                              topMargin=0.75*inch, bottomMargin=0.75*inch)
+    story = []
+    styles = getSampleStyleSheet()
+
+    title_s = ParagraphStyle('T', fontName='Helvetica-Bold', fontSize=26,
+                              textColor=colors.HexColor('#C0392B'), alignment=TA_CENTER, spaceAfter=4)
+    sub_s   = ParagraphStyle('S', fontName='Helvetica', fontSize=9,
+                              textColor=colors.HexColor('#888888'), alignment=TA_CENTER, spaceAfter=2)
+    h2_s    = ParagraphStyle('H2', fontName='Helvetica-Bold', fontSize=12,
+                              textColor=colors.HexColor('#1A1A2E'), spaceBefore=14, spaceAfter=6)
+    body_s  = ParagraphStyle('B', fontName='Helvetica', fontSize=10,
+                              textColor=colors.HexColor('#333333'), leading=15, spaceAfter=6)
+
+    # Header
+    story.append(Paragraph("NOCAP", title_s))
+    story.append(Paragraph("Deepfake Detection Forensic Report", sub_s))
+    story.append(Paragraph("EfficientNet-B4  ·  DFDC Dataset  ·  AUC 0.9507", sub_s))
+    story.append(HRFlowable(width=MW, thickness=2, color=colors.HexColor('#C0392B'), spaceAfter=12))
+
+    # Meta
+    now = datetime.now().strftime("%Y-%m-%d  %H:%M:%S")
+    meta = Table([["File", filename], ["Date", now], ["Model", "EfficientNet-B4 (DFDC fine-tuned)"]],
+                 colWidths=[1.4*inch, MW-1.4*inch])
+    meta.setStyle(TableStyle([
+        ('FONTNAME',  (0,0),(-1,-1), 'Helvetica'),
+        ('FONTNAME',  (0,0),(0,-1),  'Helvetica-Bold'),
+        ('FONTSIZE',  (0,0),(-1,-1), 9),
+        ('TEXTCOLOR', (0,0),(0,-1),  colors.HexColor('#888888')),
+        ('TEXTCOLOR', (1,0),(1,-1),  colors.HexColor('#222222')),
+        ('ROWBACKGROUNDS',(0,0),(-1,-1),[colors.HexColor('#F8F8F8'),colors.white]),
+        ('GRID',      (0,0),(-1,-1), 0.5, colors.HexColor('#EEEEEE')),
+        ('LEFTPADDING',(0,0),(-1,-1),8),('TOPPADDING',(0,0),(-1,-1),5),('BOTTOMPADDING',(0,0),(-1,-1),5),
+    ]))
+    story.append(meta)
+    story.append(Spacer(1, 14))
+
+    # Verdict box
+    v_c  = colors.HexColor('#C0392B') if verdict=="FAKE" else colors.HexColor('#1E8449')
+    v_bg = colors.HexColor('#FEF0EE') if verdict=="FAKE" else colors.HexColor('#EAFAF1')
+    vt = Table([[
+        Paragraph(f'<font size="20" color="{v_c.hexval()}"><b>{verdict}</b></font>',
+                  ParagraphStyle('V', alignment=TA_CENTER)),
+        Paragraph(f'<font size="10" color="#555">Risk Level</font><br/>'
+                  f'<font size="13" color="{risk_color}"><b>{risk_label}</b></font>',
+                  ParagraphStyle('R', alignment=TA_CENTER)),
+        Paragraph(f'<font size="10" color="#555">Fake Probability</font><br/>'
+                  f'<font size="13" color="#C0392B"><b>{round(norm_score*100,1)}%</b></font>',
+                  ParagraphStyle('F', alignment=TA_CENTER)),
+        Paragraph(f'<font size="10" color="#555">Fake Frames</font><br/>'
+                  f'<font size="13" color="#E67E22"><b>{round(fake_ratio*100)}%</b></font>',
+                  ParagraphStyle('FF', alignment=TA_CENTER)),
+    ]], colWidths=[MW/4]*4)
+    vt.setStyle(TableStyle([
+        ('BACKGROUND',(0,0),(-1,-1),v_bg),
+        ('GRID',(0,0),(-1,-1),0.5,colors.HexColor('#DDDDDD')),
+        ('ALIGN',(0,0),(-1,-1),'CENTER'),('VALIGN',(0,0),(-1,-1),'MIDDLE'),
+        ('TOPPADDING',(0,0),(-1,-1),12),('BOTTOMPADDING',(0,0),(-1,-1),12),
+    ]))
+    story.append(vt)
+    story.append(Spacer(1, 14))
+
+    # Frame chart
+    story.append(Paragraph("Frame-by-Frame Fake Probability", h2_s))
+    story.append(HRFlowable(width=MW, thickness=1, color=colors.HexColor('#EEEEEE'), spaceAfter=8))
+    norm_scores = [(s - REAL_ANCHOR)/(FAKE_ANCHOR - REAL_ANCHOR) for s in scores]
+    norm_scores = [max(0.0, min(1.0, s)) for s in norm_scores]
+    fig, ax = plt.subplots(figsize=(7, 2.2))
+    fig.patch.set_facecolor('#F8F8F8'); ax.set_facecolor('#F8F8F8')
+    xs = list(range(1, len(norm_scores)+1))
+    ax.plot(xs, norm_scores, color='#C0392B', linewidth=2, marker='o', markersize=4)
+    ax.axhline(y=NORM_THRESHOLD, color='#888', linestyle='--', linewidth=1)
+    ax.fill_between(xs, norm_scores, NORM_THRESHOLD,
+                    where=[s>NORM_THRESHOLD for s in norm_scores], alpha=0.15, color='#C0392B')
+    ax.set_ylim(0,1); ax.set_xlim(1, len(norm_scores))
+    ax.set_xlabel('Frame', fontsize=8, color='#555'); ax.set_ylabel('Fake Prob', fontsize=8, color='#555')
+    ax.tick_params(labelsize=7, colors='#777')
+    ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
+    for sp in ax.spines.values(): sp.set_color('#CCC')
+    plt.tight_layout(pad=0.5)
+    cbuf = io.BytesIO(); plt.savefig(cbuf, format='png', dpi=150, bbox_inches='tight'); plt.close(); cbuf.seek(0)
+    story.append(RLImage(cbuf, width=MW, height=2.0*inch))
+    story.append(Spacer(1, 14))
+
+    # Grad-CAM
+    if gradcam_overlay_np is not None:
+        story.append(Paragraph("Grad-CAM Activation Map", h2_s))
+        story.append(HRFlowable(width=MW, thickness=1, color=colors.HexColor('#EEEEEE'), spaceAfter=6))
+        story.append(Paragraph(
+            "The heatmap highlights facial regions that most influenced the model's decision. "
+            "Bright regions (yellow/white in inferno colourmap) indicate high activation — "
+            "areas associated with deepfake artifacts such as boundary inconsistencies, "
+            "texture anomalies, and unnatural frequency patterns.", body_s))
+        story.append(Spacer(1,6))
+        cam_buf = io.BytesIO()
+        Image.fromarray(gradcam_overlay_np).save(cam_buf, format='PNG'); cam_buf.seek(0)
+        story.append(RLImage(cam_buf, width=2.0*inch, height=2.0*inch))
+        story.append(Spacer(1, 14))
+
+    # Interpretation
+    story.append(Paragraph("Interpretation", h2_s))
+    story.append(HRFlowable(width=MW, thickness=1, color=colors.HexColor('#EEEEEE'), spaceAfter=8))
+    story.append(Paragraph(
+        f"The NoCap AI system analysed this video and returned a verdict of <b>{verdict}</b> "
+        f"with a fake probability of {round(norm_score*100,1)}% (risk level: {risk_label}). "
+        f"Raw model average score: {round(avg_raw,4)}. "
+        f"{round(fake_ratio*100)}% of frames exceeded the individual frame threshold of {FRAME_THRESHOLD}.<br/><br/>"
+        f"This report is generated automatically and should be treated as indicative, "
+        f"not as definitive legal or forensic evidence.", body_s))
+    story.append(Spacer(1, 12))
+    story.append(HRFlowable(width=MW, thickness=1, color=colors.HexColor('#C0392B'), spaceAfter=6))
+    story.append(Paragraph("NoCap Deepfake Detector  ·  EfficientNet-B4  ·  2026",
+                             ParagraphStyle('Ft', fontName='Helvetica', fontSize=8,
+                                            textColor=colors.HexColor('#AAAAAA'), alignment=TA_CENTER)))
+    doc.build(story)
+    buf.seek(0); return buf.read()
 
 # ══════════════════════════════════════════════════════════════
 # HERO
@@ -378,7 +563,7 @@ with tab1:
                 prog.empty()
 
                 verdict, confidence, avg_score, fake_ratio, norm_score = smart_verdict(scores)
-                render_verdict_card(verdict, confidence, avg_score, fake_ratio, norm_score, len(faces))
+                risk_label, risk_color = render_verdict_card(verdict, confidence, avg_score, fake_ratio, norm_score, len(faces))
 
         # Frame chart
         if 'scores' in dir() and scores:
@@ -406,6 +591,37 @@ with tab1:
                 with g2: st.image(gc_imgs[0], use_column_width=True); st.markdown('<div class="gradcam-caption">Grad-CAM Heatmap</div>', unsafe_allow_html=True)
                 with g3: st.image(gc_imgs[1], use_column_width=True); st.markdown('<div class="gradcam-caption">Overlay</div>', unsafe_allow_html=True)
 
+        # ── PDF Download ──────────────────────────────────────────
+        if 'verdict' in dir() and verdict and 'scores' in dir() and scores:
+            st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-title">FORENSIC REPORT</div>', unsafe_allow_html=True)
+            st.markdown("""
+            <div style="font-family:'DM Mono',monospace;font-size:0.66rem;color:#555;
+                        letter-spacing:2px;text-transform:uppercase;margin-bottom:14px;">
+                Download a complete PDF with verdict, frame chart, Grad-CAM &amp; interpretation
+            </div>""", unsafe_allow_html=True)
+            overlay_np = None
+            if 'gc_imgs' in dir() and gc_imgs:
+                overlay_np = gc_imgs[1]
+            with st.spinner("Generating PDF..."):
+                pdf_bytes = generate_pdf(
+                    filename         = uploaded.name,
+                    verdict          = verdict,
+                    risk_label       = risk_label,
+                    risk_color       = risk_color,
+                    norm_score       = norm_score,
+                    avg_raw          = avg_score,
+                    fake_ratio       = fake_ratio,
+                    scores           = scores,
+                    gradcam_overlay_np = overlay_np
+                )
+            st.download_button(
+                label     = "DOWNLOAD FORENSIC REPORT  (PDF)",
+                data      = pdf_bytes,
+                file_name = f"NoCap_Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                mime      = "application/pdf"
+            )
+
         try: os.unlink(tmp_path)
         except: pass
 
@@ -423,6 +639,8 @@ with tab2:
             <div class="pipeline-row"><span class="pipeline-num">03</span>EfficientNet-B4 — score each face (0–1)</div>
             <div class="pipeline-row"><span class="pipeline-num">04</span>Score normalisation + {int(FAKE_FRAME_RATIO*100)}% frames above {FRAME_THRESHOLD} guard</div>
             <div class="pipeline-row"><span class="pipeline-num">05</span>Grad-CAM — highlight suspicious regions</div>
+            <div class="pipeline-row"><span class="pipeline-num">06</span>5-level risk meter — Authentic to Likely Deepfake</div>
+            <div class="pipeline-row"><span class="pipeline-num">07</span>PDF forensic report — downloadable evidence</div>
         </div>
         <div class="about-card">
             <div class="about-card-title">Model Performance</div>
@@ -461,5 +679,6 @@ with tab2:
             <span class="tag">OpenCV</span>
             <span class="tag">DFDC</span>
             <span class="tag">Streamlit</span>
+            <span class="tag">ReportLab</span>
         </div>
         """, unsafe_allow_html=True)
