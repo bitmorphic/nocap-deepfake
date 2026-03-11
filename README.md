@@ -102,23 +102,6 @@ nocap-deepfake/
     └── efficientnet_b4_dfdc.pth   # Downloaded at runtime from Google Drive
 ```
 
----
-
-## Running Locally
-
-```bash
-git clone https://github.com/bitmorphic/nocap-deepfake.git
-cd nocap-deepfake
-
-pip install -r requirements.txt
-
-streamlit run app.py
-```
-
-> **Note:** On first run the model (~71MB) downloads automatically from Google Drive. A GPU is not required but will significantly speed up inference.
-
----
-
 ## Dependencies
 
 **requirements.txt**
@@ -148,7 +131,7 @@ libgl1
 
 The app is deployed on Streamlit Cloud directly from this repository. Any push to `main` triggers an automatic redeploy.
 
-Live app: [nocap.streamlit.app](https://nocap.streamlit.app)
+Live app: [nocap-deepfake app](https://nocap-deepfake.streamlit.app/)
 
 ---
 
