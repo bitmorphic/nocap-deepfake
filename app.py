@@ -151,8 +151,8 @@ html, body, [class*="css"], .stApp {
 
 # ── Constants ────────────────────────────────────────────────
 DEVICE     = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-BASE_DRIVE = '/content/drive/MyDrive/NoCap-Deepfake'
-MODEL_ID   = "13goF5n1TXIOtaimlNZPQ2s4mAr3uTJCp"
+BASE_DRIVE = '/content/drive/MyDrive/deepfake-video-detection'
+MODEL_ID   = "1TbdPmcS-VMmp2s1N8ElOwmIAq-18_KlI"
 
 # ── Calibrated score normalisation ──────────────────────────
 # Raw model scores are compressed in 0.85-1.0 because DFDC is 79% fake.
@@ -162,10 +162,10 @@ MODEL_ID   = "13goF5n1TXIOtaimlNZPQ2s4mAr3uTJCp"
 # Normalised score = (raw - REAL_ANCHOR) / (FAKE_ANCHOR - REAL_ANCHOR)
 # Decision at NORM_THRESHOLD=0.50 on normalised score.
 # Guard: 60%+ of frames must also be above FRAME_THRESHOLD (raw).
-REAL_ANCHOR      = 0.88
-FAKE_ANCHOR      = 0.97
+REAL_ANCHOR      = 0.54
+FAKE_ANCHOR      = 0.93
 NORM_THRESHOLD   = 0.50
-FRAME_THRESHOLD  = 0.92
+FRAME_THRESHOLD  = 0.73
 FAKE_FRAME_RATIO = 0.60
 
 # Risk level scale on normalised 0-1 score
