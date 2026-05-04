@@ -151,7 +151,7 @@ html, body, [class*="css"], .stApp {
 
 # ── Constants ────────────────────────────────────────────────
 DEVICE     = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-BASE_DRIVE = '/content/drive/MyDrive/deepfake-video-detection'
+BASE_DRIVE = '/content/drive/MyDrive/nocap-deepfake'
 MODEL_ID   = "1TbdPmcS-VMmp2s1N8ElOwmIAq-18_KlI"
 
 # ── Calibrated score normalisation ──────────────────────────
@@ -200,12 +200,15 @@ class EfficientNetB4(nn.Module):
 @st.cache_resource
 def load_model():
     os.makedirs("models", exist_ok=True)
-    path = "models/efficientnet_b4_dfdc.pth"
+    # Fine-tuned Celeb-DF v2 model — different filename forces fresh download
+    path = "models/efficientnet_b4_celebdf.pth"
     if not os.path.exists(path):
-        dp = f"{BASE_DRIVE}/models/checkpoints/efficientnet_b4_dfdc.pth"
+        # Try Drive first (Colab with mounted Drive)
+        dp = f"{BASE_DRIVE}/models/checkpoints/efficientnet_b4_celebdf.pth"
         if os.path.exists(dp):
             import shutil; shutil.copy(dp, path)
         else:
+            # Download fine-tuned model from Google Drive
             gdown.download(f"https://drive.google.com/uc?id={MODEL_ID}", path, quiet=True)
     net = EfficientNetB4().to(DEVICE)
     net.model.load_state_dict(torch.load(path, map_location=DEVICE))
@@ -253,7 +256,13 @@ def apply_heatmap(cam, img_np):
 def crop_face(pil_img, mtcnn):
     if mtcnn is None: return pil_img.resize((224,224))
     try:
-        face = mtcnn(pil_img)
+        # Resize large frames before MTCNN — high-res frames (1080p+) can confuse MTCNN
+        w, h = pil_img.size
+        if w > 640:
+            pil_small = pil_img.resize((640, int(h * 640 / w)))
+        else:
+            pil_small = pil_img
+        face = mtcnn(pil_small)
         if face is not None:
             fn = face.permute(1,2,0).numpy()
             fn = ((fn - fn.min())/(fn.max()-fn.min()+1e-8)*255).astype(np.uint8)
@@ -644,11 +653,12 @@ with tab2:
         </div>
         <div class="about-card">
             <div class="about-card-title">Model Performance</div>
-            <div class="metric-row"><span class="metric-label">Val AUC</span><span class="metric-value">0.9507</span></div>
-            <div class="metric-row"><span class="metric-label">Val F1</span><span class="metric-value">0.9188</span></div>
-            <div class="metric-row"><span class="metric-label">Val Accuracy</span><span class="metric-value">87.44%</span></div>
-            <div class="metric-row"><span class="metric-label">Fake Detection</span><span class="metric-value">91%</span></div>
-            <div class="metric-row"><span class="metric-label">Real Detection</span><span class="metric-value">78%</span></div>
+            <div class="metric-row"><span class="metric-label">Celeb-DF v2 AUC</span><span class="metric-value">0.9637</span></div>
+            <div class="metric-row"><span class="metric-label">Celeb-DF v2 F1</span><span class="metric-value">0.9580</span></div>
+            <div class="metric-row"><span class="metric-label">Celeb-DF v2 Accuracy</span><span class="metric-value">93.53%</span></div>
+            <div class="metric-row"><span class="metric-label">Fake Detection</span><span class="metric-value">97.35%</span></div>
+            <div class="metric-row"><span class="metric-label">Real Detection</span><span class="metric-value">81.48%</span></div>
+            <div class="metric-row"><span class="metric-label">DFDC Val AUC</span><span class="metric-value">0.9507</span></div>
             <div class="metric-row"><span class="metric-label">Norm Threshold</span><span class="metric-value">{NORM_THRESHOLD}</span></div>
             <div class="metric-row"><span class="metric-label">Frame Guard</span><span class="metric-value">{FAKE_FRAME_RATIO}</span></div>
         </div>
@@ -658,10 +668,11 @@ with tab2:
         <div class="about-card">
             <div class="about-card-title">Score Normalisation</div>
             <p>
-                NoCap uses score normalisation to handle model bias. Raw scores are compressed
-                near 1.0 due to class imbalance (79% fake training data). We rescale using
-                empirical anchors: real videos anchor at 0.88, fake at 0.97. After
-                normalisation, a real video scores near 0 and a fake scores near 1.<br><br>
+                NoCap uses a two-stage training approach — pretrained on DFDC (93,853 face crops),
+                then fine-tuned on Celeb-DF v2 for domain adaptation. The fine-tuned model
+                scores real videos around 0.54 and fake videos around 0.93 on average.<br><br>
+                Score normalisation rescales these using empirical anchors: real anchor 0.54,
+                fake anchor 0.93. After normalisation, real videos score near 0 and fakes near 1.
                 A secondary frame guard requires 60%+ of frames to confirm the verdict,
                 preventing isolated spike frames from causing false positives.
             </p>
@@ -678,6 +689,7 @@ with tab2:
             <span class="tag">Grad-CAM</span>
             <span class="tag">OpenCV</span>
             <span class="tag">DFDC</span>
+            <span class="tag">Celeb-DF v2</span>
             <span class="tag">Streamlit</span>
             <span class="tag">ReportLab</span>
         </div>
