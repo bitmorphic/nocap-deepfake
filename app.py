@@ -151,7 +151,7 @@ html, body, [class*="css"], .stApp {
 
 # ── Constants ────────────────────────────────────────────────
 DEVICE     = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-BASE_DRIVE = '/content/drive/MyDrive/nocap-deepfake'
+BASE_DRIVE = '/content/drive/MyDrive/deepfake-video-detection'
 MODEL_ID   = "1TbdPmcS-VMmp2s1N8ElOwmIAq-18_KlI"
 
 # ── Calibrated score normalisation ──────────────────────────
