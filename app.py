@@ -208,7 +208,15 @@ def load_model():
         else:
             gdown.download(f"https://drive.google.com/uc?id={MODEL_ID}", path, quiet=True)
     net = EfficientNetB4().to(DEVICE)
-    net.model.load_state_dict(torch.load(path, map_location=DEVICE))
+    ckpt = torch.load(path, map_location=DEVICE, weights_only=False)
+    # Support checkpoints saved as net.state_dict() (keys: "model.*")
+    # or net.model.state_dict() (keys: "features.*", "classifier.*")
+    try:
+        net.model.load_state_dict(ckpt)
+    except RuntimeError:
+        # Strip the outer "model." prefix and retry
+        stripped = {k.removeprefix("model."): v for k, v in ckpt.items()}
+        net.model.load_state_dict(stripped)
     net.eval()
     tfm = transforms.Compose([
         transforms.Resize((224,224)),
@@ -413,10 +421,11 @@ def generate_pdf(filename, verdict, risk_label, risk_color,
     story.append(Spacer(1, 14))
 
     # Verdict box
-    v_c  = colors.HexColor('#C0392B') if verdict=="FAKE" else colors.HexColor('#1E8449')
+    v_c_hex = '#C0392B' if verdict=="FAKE" else '#1E8449'
+    v_c  = colors.HexColor(v_c_hex)
     v_bg = colors.HexColor('#FEF0EE') if verdict=="FAKE" else colors.HexColor('#EAFAF1')
     vt = Table([[
-        Paragraph(f'<font size="20" color="{v_c.hexval()}"><b>{verdict}</b></font>',
+        Paragraph(f'<font size="20" color="{v_c_hex}"><b>{verdict}</b></font>',
                   ParagraphStyle('V', alignment=TA_CENTER)),
         Paragraph(f'<font size="10" color="#555">Risk Level</font><br/>'
                   f'<font size="13" color="{risk_color}"><b>{risk_label}</b></font>',
@@ -526,6 +535,13 @@ tab1, tab2 = st.tabs(["ANALYSE VIDEO", "ABOUT"])
 # TAB 1 — VIDEO UPLOAD
 # ══════════════════════════════════════════════════════════════
 with tab1:
+    # Pre-initialise so all result checks below are simple truthiness tests
+    scores  = []
+    faces   = []
+    verdict = None
+    gc_imgs = None
+    risk_label = risk_color = norm_score = avg_score = fake_ratio = None
+
     uploaded = st.file_uploader("Upload video", type=["mp4","avi","mov","mkv"], label_visibility="collapsed")
 
     if not uploaded:
@@ -566,7 +582,7 @@ with tab1:
                 risk_label, risk_color = render_verdict_card(verdict, confidence, avg_score, fake_ratio, norm_score, len(faces))
 
         # Frame chart
-        if 'scores' in dir() and scores:
+        if scores:
             st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
             st.markdown('<div class="section-title">FRAME-BY-FRAME SCORES</div>', unsafe_allow_html=True)
             chart_df = pd.DataFrame({
@@ -580,19 +596,19 @@ with tab1:
             </div>""", unsafe_allow_html=True)
 
         # Grad-CAM
-        if 'faces' in dir() and faces and 'scores' in dir() and scores:
+        if faces and scores:
             gc_imgs = run_gradcam(model, transform, faces[int(np.argmax(scores))])
             if gc_imgs:
                 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
                 st.markdown('<div class="section-title">ACTIVATION MAP</div>', unsafe_allow_html=True)
                 g1,g2,g3 = st.columns(3, gap="small")
                 img_np = np.array(faces[int(np.argmax(scores))].resize((224,224)))
-                with g1: st.image(img_np, use_column_width=True); st.markdown('<div class="gradcam-caption">Original Face</div>', unsafe_allow_html=True)
-                with g2: st.image(gc_imgs[0], use_column_width=True); st.markdown('<div class="gradcam-caption">Grad-CAM Heatmap</div>', unsafe_allow_html=True)
-                with g3: st.image(gc_imgs[1], use_column_width=True); st.markdown('<div class="gradcam-caption">Overlay</div>', unsafe_allow_html=True)
+                with g1: st.image(img_np, use_container_width=True); st.markdown('<div class="gradcam-caption">Original Face</div>', unsafe_allow_html=True)
+                with g2: st.image(gc_imgs[0], use_container_width=True); st.markdown('<div class="gradcam-caption">Grad-CAM Heatmap</div>', unsafe_allow_html=True)
+                with g3: st.image(gc_imgs[1], use_container_width=True); st.markdown('<div class="gradcam-caption">Overlay</div>', unsafe_allow_html=True)
 
         # ── PDF Download ──────────────────────────────────────────
-        if 'verdict' in dir() and verdict and 'scores' in dir() and scores:
+        if verdict and scores:
             st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
             st.markdown('<div class="section-title">FORENSIC REPORT</div>', unsafe_allow_html=True)
             st.markdown("""
@@ -601,7 +617,7 @@ with tab1:
                 Download a complete PDF with verdict, frame chart, Grad-CAM &amp; interpretation
             </div>""", unsafe_allow_html=True)
             overlay_np = None
-            if 'gc_imgs' in dir() and gc_imgs:
+            if gc_imgs:
                 overlay_np = gc_imgs[1]
             with st.spinner("Generating PDF..."):
                 pdf_bytes = generate_pdf(
@@ -654,15 +670,15 @@ with tab2:
         </div>
         """, unsafe_allow_html=True)
     with col2:
-        st.markdown("""
+        st.markdown(f"""
         <div class="about-card">
             <div class="about-card-title">Score Normalisation</div>
             <p>
                 NoCap uses score normalisation to handle model bias. Raw scores are compressed
                 near 1.0 due to class imbalance (79% fake training data). We rescale using
-                empirical anchors: real videos anchor at 0.88, fake at 0.97. After
+                empirical anchors: real videos anchor at {REAL_ANCHOR}, fake at {FAKE_ANCHOR}. After
                 normalisation, a real video scores near 0 and a fake scores near 1.<br><br>
-                A secondary frame guard requires 60%+ of frames to confirm the verdict,
+                A secondary frame guard requires {int(FAKE_FRAME_RATIO*100)}%+ of frames to confirm the verdict,
                 preventing isolated spike frames from causing false positives.
             </p>
         </div>
