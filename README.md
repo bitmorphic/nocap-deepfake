@@ -1,4 +1,4 @@
-# 🎬 NoCap: AI-Powered Deepfake Video Detection System
+# 🎬 NoCap: AI-Powered Deepfake Video Detection System | NIT DELHI | SEMESTER MINOR PROJECT
 
 ![Deployment](https://img.shields.io/badge/Deployed_on-Streamlit_Cloud-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)
 ![Metrics](https://img.shields.io/badge/Celeb--DF_v2_AUC-0.9637-success?style=for-the-badge)
