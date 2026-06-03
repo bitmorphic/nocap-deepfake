@@ -1,150 +1,72 @@
-# NoCap — Deepfake Video Detector
+# 🎬 NoCap: AI-Powered Deepfake Video Detection System
 
-AI-powered deepfake detection using EfficientNet-B4 fine-tuned on the DFDC dataset. Analyses videos frame-by-frame, detects manipulated faces, visualises suspicious regions with Grad-CAM, and generates a downloadable forensic PDF report.
+![Deployment](https://img.shields.io/badge/Deployed_on-Streamlit_Cloud-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)
+![Metrics](https://img.shields.io/badge/Celeb--DF_v2_AUC-0.9637-success?style=for-the-badge)
+![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 
----
+[cite_start]**NoCap** (No Cap on Fakes) is a complete, end-to-end deepfake video detection system designed to combat the rising threat of synthetic media[cite: 6, 16]. [cite_start]By combining state-of-the-art deep learning, visual explainability, and an accessible web interface, NoCap allows anyone to upload a video and receive a forensic-grade authenticity verdict in seconds[cite: 16].
 
-## Features
-
-- **Video analysis** — Extracts 20 evenly spaced frames, detects faces via MTCNN, scores each face with EfficientNet-B4
-- **5-level risk meter** — Authentic / Low Risk / Suspicious / High Risk / Likely Deepfake
-- **Score normalisation** — Calibrated against real-world anchors to reduce false positives from training bias
-- **Frame-by-frame chart** — Visual breakdown of fake probability across all analysed frames
-- **Grad-CAM heatmap** — Highlights which facial regions influenced the model's decision
-- **PDF forensic report** — Downloadable report with verdict, chart, Grad-CAM, and interpretation
+[cite_start]Live Web Application: [Streamlit Cloud](https://github.com/bitmorphic/nocap-deepfake) [cite: 9]
 
 ---
 
-## Model
-
-| Property | Value |
-|---|---|
-| Architecture | EfficientNet-B4 |
-| Pretrained on | ImageNet |
-| Fine-tuned on | DFDC (DeepFake Detection Challenge) |
-| Training set | 93,853 face crops |
-| Validation set | 30,794 face crops |
-| Val AUC | **0.9507** |
-| Val F1 | **0.9188** |
-| Val Accuracy | **87.44%** |
-| Fake detection rate | 91% |
-| Real detection rate | 78% |
+## 🔴 The Problem
+[cite_start]Deepfake technology has evolved to produce hyper-realistic synthetic media, posing critical threats to public trust, electoral processes, and personal privacy[cite: 14, 15]. [cite_start]While the volume of manipulated content has grown exponentially, accessible detection tools for ordinary users remain scarce[cite: 39, 62]. [cite_start]NoCap bridges this gap by providing an explainable, robust, and zero-installation detection platform[cite: 41, 42].
 
 ---
 
-## Pipeline
+## ⚙️ Tech Stack
 
-```
-Video file
-    └── OpenCV          → extract 20 evenly spaced frames
-        └── MTCNN       → detect and crop faces to 224×224
-            └── EfficientNet-B4  → score each face (raw 0–1)
-                └── Score normalisation  → calibrated fake probability (0–1)
-                    └── Dual condition   → avg > 0.90 AND 60% frames > 0.92
-                        └── Verdict      → FAKE / REAL + 5-level risk label
-                            └── Grad-CAM → activation heatmap on most suspicious face
-                                └── PDF  → forensic report
-```
+![PyTorch](https://img.shields.io/badge/PyTorch-%23EE4C2C.svg?style=for-the-badge&logo=PyTorch&logoColor=white)
+![OpenCV](https://img.shields.io/badge/opencv-%23white.svg?style=for-the-badge&logo=opencv&logoColor=white)
+![NumPy](https://img.shields.io/badge/numpy-%23013243.svg?style=for-the-badge&logo=numpy&logoColor=white)
+![Pandas](https://img.shields.io/badge/pandas-%23150458.svg?style=for-the-badge&logo=pandas&logoColor=white)
+![Matplotlib](https://img.shields.io/badge/Matplotlib-%23ffffff.svg?style=for-the-badge&logo=Matplotlib&logoColor=black)
+![Streamlit](https://img.shields.io/badge/Streamlit-%23FE4B4B.svg?style=for-the-badge&logo=streamlit&logoColor=white)
+
+[cite_start]**Libraries Used:** PyTorch, torchvision, facenet-pytorch (MTCNN), OpenCV (headless), NumPy, Matplotlib, Pandas, Streamlit, ReportLab, and gdown.
 
 ---
 
-## Score Normalisation
+## 🧠 System Architecture & Pipeline
 
-The DFDC training set is 79% fake, which compresses raw model scores toward 1.0 even for real inputs. Raw scores are normalised using empirically measured anchors:
+[cite_start]The inference pipeline takes raw video and outputs a calibrated forensic verdict[cite: 44]:
 
-```python
-REAL_ANCHOR    = 0.88   # typical avg score for a real video
-FAKE_ANCHOR    = 0.97   # typical avg score for a fake video
-NORM_THRESHOLD = 0.50   # decision threshold on normalised score
-
-normalised = (raw_score - REAL_ANCHOR) / (FAKE_ANCHOR - REAL_ANCHOR)
-```
-
-A video is classified FAKE only when **both** conditions are met:
-1. Normalised score > 0.50
-2. At least 60% of frames score above 0.92 (raw)
+1. [cite_start]**Frame Extraction:** OpenCV extracts 20 evenly spaced frames from the uploaded video[cite: 19].
+2. [cite_start]**Face Detection:** MTCNN (Multi-task Cascaded Convolutional Networks) detects and crops faces via a 3-stage cascade[cite: 19, 115].
+3. [cite_start]**Feature Extraction & Scoring:** An EfficientNet-B4 model (19M parameters, compound-scaled) scores each cropped face[cite: 17, 92, 93].
+4. [cite_start]**Score Normalization:** Corrects the 79% fake class imbalance present in the pretraining dataset by mapping scores using empirically measured anchors[cite: 101, 102].
+5. [cite_start]**Dual-Condition Verdict:** Eliminates false positives by requiring a normalized average score > 0.50 AND at least 60% of individual frames to have a raw score > 0.92[cite: 104, 105].
+6. [cite_start]**Explainability (Grad-CAM):** Generates spatial heatmaps indicating which facial regions most influenced the model's prediction[cite: 20, 108].
+7. [cite_start]**Forensic Report:** Generates a downloadable in-memory PDF via ReportLab detailing the 5-level risk assessment (Authentic to Likely Deepfake)[cite: 20, 113, 115].
 
 ---
 
-## Risk Levels
+## 📊 Methodology & Training Protocols
 
-| Level | Normalised Score | Color |
-|---|---|---|
-| AUTHENTIC | 0.00 – 0.20 | Green |
-| LOW RISK | 0.20 – 0.40 | Light green |
-| SUSPICIOUS | 0.40 – 0.60 | Orange |
-| HIGH RISK | 0.60 – 0.80 | Dark orange |
-| LIKELY DEEPFAKE | 0.80 – 1.00 | Red |
+[cite_start]NoCap overcomes severe domain shift issues via a **two-stage training protocol**[cite: 90, 95]:
+* [cite_start]**Stage 1 (Pretraining):** Trained on the large DeepFake Detection Challenge (DFDC) dataset (93,853 training crops) for robust feature extraction[cite: 17, 97].
+* [cite_start]**Stage 2 (Domain Adaptation):** Fine-tuned on the Celeb-DF v2 dataset to handle real-world compression and unseen generation artifacts[cite: 17, 99].
 
----
+### Performance Results (Celeb-DF v2 Test Split)
+[cite_start]NoCap surpasses all published baseline methods on the Celeb-DF v2 official test split[cite: 18].
 
-## Stack
+| Metric | Score | Notes |
+| :--- | :--- | :--- |
+| **AUC** | **0.9637** | [cite_start]Threshold-independent best metric [cite: 123] |
+| **F1 Score** | 0.9580 | [cite_start]Harmonic mean of precision and recall [cite: 123] |
+| **Accuracy** | 93.53% | [cite_start]At optimal threshold 0.740 [cite: 123] |
+| **Fake Detection Rate** | 97.35% | [cite_start]Correctly identifies actual fakes [cite: 123] |
 
-- **PyTorch** — model inference and Grad-CAM backpropagation
-- **torchvision** — EfficientNet-B4 architecture and image transforms
-- **facenet-pytorch** — MTCNN face detection
-- **OpenCV** — video frame extraction
-- **Streamlit** — web interface and deployment
-- **ReportLab** — PDF report generation
-- **Matplotlib** — frame score chart and heatmap colourmap
-- **gdown** — model weight download from Google Drive
+[cite_start]*(For comparison, the best prior baseline, Face X-ray, achieved an AUC of 0.747)*[cite: 133].
 
 ---
 
-## Project Structure
+## 💻 Local Setup & Installation
 
-```
-nocap-deepfake/
-├── app.py                  # Main Streamlit application
-├── requirements.txt        # Python dependencies
-├── packages.txt            # System dependencies (libgl1)
-└── models/
-    └── efficientnet_b4_dfdc.pth   # Downloaded at runtime from Google Drive
-```
+To run NoCap locally on your machine:
 
-## Dependencies
-
-**requirements.txt**
-```
-streamlit
-torch
-torchvision
-facenet-pytorch
-opencv-python-headless
-numpy
-Pillow
-matplotlib
-gdown
-scikit-learn
-reportlab
-pandas
-```
-
-**packages.txt**
-```
-libgl1
-```
-
----
-
-## Deployment
-
-The app is deployed on Streamlit Cloud directly from this repository. Any push to `main` triggers an automatic redeploy.
-
-Live app: [nocap-deepfake app](https://nocap-deepfake.streamlit.app/)
-
----
-
-## Known Limitations
-
-- Model trained exclusively on DFDC dataset — may not generalise to all manipulation types
-- Real detection rate (78%) is lower than fake detection rate (91%) due to class imbalance in training data
-- Score normalisation anchors were calibrated on a small set of real-world test videos and may need tuning for specific video types
-- Inference runs on CPU on Streamlit Cloud — analysis takes 15–30 seconds per video depending on length
-- Single-frame webcam detection is unreliable due to domain gap between webcam captures and DFDC face crops
-
----
-
-## License
-
-MIT License. See `LICENSE` for details.
+1. **Clone the repository:**
+   ```bash
+   git clone [https://github.com/bitmorphic/nocap-deepfake.git](https://github.com/bitmorphic/nocap-deepfake.git)
+   cd nocap-deepfake
