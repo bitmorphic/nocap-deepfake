@@ -45,7 +45,7 @@ The inference pipeline extracts data from uploaded videos and produces a graded,
 
 ---
 
-## 📊 Methodology & Training Protocols
+## Methodology & Training Protocols
 
 NoCap utilizes a two-stage training approach to handle domain shift between training and real-world video:
 * **Stage 1 (Pretraining):** Initial training on the large DeepFake Detection Challenge (DFDC) benchmark.
